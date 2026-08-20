@@ -1,3 +1,36 @@
 spring:
   application:
     name: webhook-delivery
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/webhookdb
+    username: webhookuser
+    password: webhookpass
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # We use Flyway, so we validate, never update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  threads:
+    virtual:
+      enabled: true   # This enables Java 21 Virtual Threads for our workers
+
+server:
+  port: 8080
+  shutdown: graceful
+
+logging:
+  level:
+    com.webhook: DEBUG
+    org.springframework.web: INFO
+    org.hibernate: WARN

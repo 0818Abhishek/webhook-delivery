@@ -34,3 +34,8 @@ logging:
     com.webhook: DEBUG
     org.springframework.web: INFO
     org.hibernate: WARN
+
+webhook:
+  timeout:
+    connect: 5000
+    read: 10000

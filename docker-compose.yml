@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,6 +10,18 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: webhook-app
+    depends_on:
+      - postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/webhookdb
+      SPRING_DATASOURCE_USERNAME: webhookuser
+      SPRING_DATASOURCE_PASSWORD: webhookpass
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:

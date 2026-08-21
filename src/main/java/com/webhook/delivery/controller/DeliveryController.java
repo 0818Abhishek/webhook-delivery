@@ -3,6 +3,7 @@ package com.webhook.delivery.controller;
 import com.webhook.delivery.dto.DeliveryResponse;
 import com.webhook.delivery.service.DeliveryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,5 +23,11 @@ public class DeliveryController {
     @GetMapping("/endpoints/{endpointId}/deliveries")
     public List<DeliveryResponse> getDeliveriesByEndpoint(@PathVariable Long endpointId) {
         return deliveryService.getDeliveriesByEndpoint(endpointId);
+    }
+
+    @PostMapping("/deliveries/{id}/redrive")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void redriveDelivery(@PathVariable Long id) {
+        deliveryService.redriveDelivery(id);
     }
 }

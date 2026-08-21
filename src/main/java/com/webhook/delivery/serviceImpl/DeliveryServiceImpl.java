@@ -5,9 +5,12 @@ import com.webhook.delivery.dto.DeliveryResponse;
 import com.webhook.delivery.entity.Delivery;
 import com.webhook.delivery.repository.DeliveryRepository;
 import com.webhook.delivery.service.DeliveryService;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -61,5 +64,21 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .nextAttemptAt(delivery.getNextAttemptAt())
                 .createdAt(delivery.getCreatedAt())
                 .build();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void redriveDelivery(Long deliveryId) {
+        Long tenantId = TenantContext.getTenantId();
+        if (tenantId == null) throw new RuntimeException("Tenant ID not found");
+
+        Delivery delivery = deliveryRepository.findById(deliveryId)
+                .filter(d -> d.getTenant().getId().equals(tenantId))
+                .orElseThrow(() -> new RuntimeException("Delivery not found or access denied"));
+
+        if (!"DEAD_LETTERED".equals(delivery.getStatus())) {
+            throw new RuntimeException("Only DEAD_LETTERED deliveries can be redriven");
+        }
+        deliveryRepository.resetDelivery(deliveryId, Instant.now());
     }
 }

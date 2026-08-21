@@ -1,5 +1,6 @@
 package com.webhook.delivery.service;
 
+import com.webhook.delivery.dto.WebhookResult;
 import com.webhook.delivery.entity.Delivery;
 import com.webhook.delivery.entity.DeliveryAttempt;
 import com.webhook.delivery.entity.Event;
@@ -35,17 +36,15 @@ public class DeliveryWorkerService {
     @Scheduled(fixedDelay = 1000)
     @Transactional
     public void processPendingDeliveries() {
-        // 1. Get all active tenants (to process deliveries per tenant)
         var tenants = tenantRepository.findAll();
 
         for (var tenant : tenants) {
             try {
-                // 2. Claim ONE pending delivery for this tenant (SKIP LOCKED)
                 Optional<Delivery> optionalDelivery = deliveryRepository
                         .findAndLockOnePendingDelivery(tenant.getId());
 
                 if (optionalDelivery.isEmpty()) {
-                    continue; // No pending deliveries for this tenant
+                    continue;
                 }
 
                 Delivery delivery = optionalDelivery.get();
@@ -54,50 +53,48 @@ public class DeliveryWorkerService {
                 log.debug("Worker claimed delivery: id={}, tenant={}, endpoint={}",
                         delivery.getId(), tenant.getId(), delivery.getEndpoint().getId());
 
-                // 3. Send the webhook
-                boolean success = webhookSenderService.sendWebhook(delivery, event.getPayload());
+                // Send the webhook and get result
+                WebhookResult result = webhookSenderService.sendWebhook(delivery, event.getPayload());
 
-                // 4. Record the attempt
+                // Record the attempt
                 DeliveryAttempt attempt = DeliveryAttempt.builder()
                         .delivery(delivery)
                         .attemptNumber(delivery.getAttemptCount() + 1)
+                        .responseCode(result.statusCode())
+                        .error(result.responseSnippet())
                         .build();
 
-                if (success) {
-                    // SUCCESS: mark delivery as done
+                if (result.success()) {
                     delivery.setStatus("SUCCESS");
-                    attempt.setResponseCode(200);
-                    delivery.setLastResponseCode(200);
+                    delivery.setLastResponseCode(result.statusCode());
                     log.info("Delivery SUCCESS: id={}, endpoint={}", delivery.getId(), delivery.getEndpoint().getUrl());
                 } else {
-                    // FAILURE: retry or dead-letter
                     int newAttemptCount = delivery.getAttemptCount() + 1;
                     delivery.setAttemptCount(newAttemptCount);
-                    attempt.setResponseCode(500); // Placeholder, real code would come from response
+                    delivery.setLastResponseCode(result.statusCode());
+                    if (result.responseSnippet() != null) {
+                        delivery.setLastResponseSnippet(result.responseSnippet());
+                    }
 
                     if (newAttemptCount >= MAX_ATTEMPTS) {
-                        // Dead-letter
                         delivery.setStatus("DEAD_LETTERED");
+                        delivery.setNextAttemptAt(null);
                         log.warn("Delivery DEAD_LETTERED: id={}, max attempts reached", delivery.getId());
                     } else {
-                        // Retry: exponential backoff + jitter
                         long delaySeconds = calculateBackoff(newAttemptCount);
                         Instant nextAttempt = Instant.now().plusSeconds(delaySeconds);
                         delivery.setNextAttemptAt(nextAttempt);
-                        delivery.setStatus("PENDING"); // Keep pending for retry
+                        delivery.setStatus("PENDING");
                         log.info("Delivery RETRY scheduled: id={}, attempt={}, next={}",
                                 delivery.getId(), newAttemptCount, nextAttempt);
                     }
                 }
 
-                // 5. Save the delivery and attempt
                 deliveryRepository.save(delivery);
                 deliveryAttemptRepository.save(attempt);
 
             } catch (Exception e) {
                 log.error("Error processing delivery for tenant {}: {}", tenant.getId(), e.getMessage(), e);
-                // Rollback happens automatically due to @Transactional
-                // The locked row will be released, and the delivery stays PENDING
             }
         }
     }

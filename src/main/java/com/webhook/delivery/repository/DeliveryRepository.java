@@ -2,10 +2,12 @@ package com.webhook.delivery.repository;
 
 import com.webhook.delivery.entity.Delivery;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,4 +29,8 @@ public interface DeliveryRepository extends JpaRepository<Delivery, Long> {
     List<Delivery> findByEventId(Long eventId);
 
     List<Delivery> findByEndpointId(Long endpointId);
+
+    @Modifying
+    @Query("UPDATE Delivery d SET d.status = 'PENDING', d.attemptCount = 0, d.nextAttemptAt = :nextAttempt, d.lastResponseCode = NULL, d.lastResponseSnippet = NULL WHERE d.id = :id")
+    void resetDelivery(@Param("id") Long id, @Param("nextAttempt") Instant nextAttempt);
 }
